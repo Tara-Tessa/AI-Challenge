@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Challenge AI</title>
+    <style>
+        #video {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Hello!</h1>
+    <video autoplay playsinline muted id="video"></video>
+
+    <canvas id="canvas" width="640" height="480"></canvas>
+
+    <div>
+        <button id="button1" data-label="open">open</button>
+        <button id="button2" data-label="closed">closed</button>
+    </div>
+
+    <div>
+        <button id="trainButton">Train</button>
+        <button id="saveButton">Save</button>
+    </div>
+
+    <p id="label"></p>
+
+    <!-- load ml5 -->
+    <script src="https://unpkg.com/ml5@0.6.1/dist/ml5.min.js"></script>
+
+    <!-- Require the peer dependencies of handpose. -->
+    <script src="https://unpkg.com/@tensorflow/tfjs-core@2.1.0/dist/tf-core.js"></script>
+    <script src="https://unpkg.com/@tensorflow/tfjs-converter@2.1.0/dist/tf-converter.js"></script>
+
+    <!-- You must explicitly require a TF.js backend if you're not using the tfs union bundle. -->
+    <script src="https://unpkg.com/@tensorflow/tfjs-backend-webgl@2.1.0/dist/tf-backend-webgl.js"></script>
+    <!-- Alternatively you can use the WASM backend: <script src="https://unpkg.com/@tensorflow/tfjs-backend-wasm@2.1.0/dist/tf-backend-wasm.js"></script> -->
+
+    <script src="https://unpkg.com/@tensorflow-models/handpose@0.0.6/dist/handpose.js"></script>
+
+    <script>
+        {
+            let predictions = [];
+            let handpose;
+
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            let $video;
+
+            $video = document.getElementById('video');
+
+            let featureExtractor, classifier;
+
+            const $button1 = document.getElementById('button1');
+            const $button2 = document.getElementById('button2');
+            const $trainButton = document.getElementById('trainButton');
+            const $saveButton = document.getElementById('saveButton');
+            const $label = document.getElementById('label');
+
+            const init = async () => {
+
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+                $video.srcObject = stream;
+                video.play();
+                document.body.appendChild($video);
+
+
+                const modelLoaded = () => {
+                    console.log('Model Loaded!');
+                }
+                const handpose = ml5.handpose($video, modelLoaded);
+                handpose.on('predict', results => {
+                    predictions = results;
+                    draw(predictions);
+                });
+
+
+                featureExtractor = await ml5.featureExtractor('MobileNet');
+                classifier = featureExtractor.classification($video);
+
+                $button1.addEventListener('click', classifyButtonClicked);
+                $button2.addEventListener('click', classifyButtonClicked);
+                $trainButton.addEventListener('click', trainClickHandler);
+                $saveButton.addEventListener('click', saveClickHandler);
+            }
+
+            const saveClickHandler = () => {
+                classifier.save();
+            }
+
+            const classifyButtonClicked = (e) => {
+                const $btn = e.currentTarget;
+                const label = $btn.dataset.label;
+
+                classifier.addImage($video, label);
+            }
+
+            const trainClickHandler = () => {
+                console.log('start training');
+                classifier.train((lossValue) => {
+                    console.log('loss is', lossValue);
+                    if (lossValue === null) {
+                        loop();
+                    }
+                });
+            }
+
+            const loop = async () => {
+                const result = await classifier.classify($video);
+                //console.log(result);
+                $label.textContent = `${result[0].label}, confidence: ${result[0].confidence}`;
+                loop();
+            }
+
+            const draw = (prediction) => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                ctx.drawImage(video, 0, 0);
+
+                for (let i = 0; i < predictions.length; i += 1) {
+                    const prediction = predictions[i];
+                    for (let j = 0; j < prediction.landmarks.length; j += 1) {
+                        const keypoint = prediction.landmarks[j];
+
+
+                        ctx.beginPath();
+                        ctx.arc(keypoint[0], keypoint[1], 5, 0, 2 * Math.PI, false);
+                        ctx.fillStyle = 'pink';
+                        ctx.fill();
+                    }
+                }
+            }
+
+            init();
+
+        }
+    </script>
+</body>
+
+</html>

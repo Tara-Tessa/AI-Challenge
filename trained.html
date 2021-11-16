@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Challenge AI</title>
+    <style>
+
+        body{
+            display: flex;
+            flex-flow: column;
+            align-items: center;
+            justify-content: center;
+            font-family: politica,sans-serif;
+            font-weight: 800;
+            font-style: normal;
+            color: lightgrey;
+            background-color: darkslategray;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin: 0.5rem;
+        }
+
+        #video {
+            display: none;
+        }
+
+        #score {
+            display: flex;
+            justify-content: space-around;
+        }
+
+        #label {
+            font-size: 2rem;
+            text-align: center;
+            margin: 0.5rem;
+        }
+
+        .container{
+            background-color: rgb(80, 97, 95);
+            padding: 0 3rem 3rem;
+        }
+
+        .best {
+            background-color: darkslategray;
+        }
+
+        .your {
+            background-color: rgb(80, 97, 95);
+        }
+
+        .button {
+            width: 10rem;
+            height: 3rem;
+            border: lightgrey solid 0.5rem;
+            display: flex;
+            justify-content: center;
+            border-radius: 10rem;
+            padding: 0.5rem;
+        }
+
+        .number {
+            font-size: 3rem;
+            font-family: snicker,sans-serif;
+            font-weight: 700;
+            font-style: normal;
+        }
+
+        .purple{
+            border-color: #ae00cd;
+            color: #ae00cd;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Train your Reaction Speed!</h1>
+    <p>When the dots turn purple close your hand as fast as possible.</p>
+    <div class="container">
+        <p id="label">loading...</p>
+        <div id="score">
+            <p class="best button"> Best score: <span class="bestScore number"> 0</span></p>
+            <p class="your button"> Your score: <span class="yourScore number"> 0</span></p>
+        </div>
+    <video autoplay playsinline muted width="640" height="480" id="video"></video>
+    <canvas id="canvas" width="640" height="480"></canvas>
+    </div>
+
+    <link rel="stylesheet" href="https://use.typekit.net/wuk8mnv.css">
+
+    <!-- load ml5 -->
+    <script src="https://unpkg.com/ml5@0.6.1/dist/ml5.min.js"></script>
+
+    <!-- Require the peer dependencies of handpose. -->
+    <script src="https://unpkg.com/@tensorflow/tfjs-core@2.1.0/dist/tf-core.js"></script>
+    <script src="https://unpkg.com/@tensorflow/tfjs-converter@2.1.0/dist/tf-converter.js"></script>
+
+    <!-- You must explicitly require a TF.js backend if you're not using the tfs union bundle. -->
+    <script src="https://unpkg.com/@tensorflow/tfjs-backend-webgl@2.1.0/dist/tf-backend-webgl.js"></script>
+    <!-- Alternatively you can use the WASM backend: <script src="https://unpkg.com/@tensorflow/tfjs-backend-wasm@2.1.0/dist/tf-backend-wasm.js"></script> -->
+
+    <script src="https://unpkg.com/@tensorflow-models/handpose@0.0.6/dist/handpose.js"></script>
+
+    <script>
+        {
+            let predictions = [];
+            let handpose;
+
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            let $video;
+
+            $video = document.getElementById('video');
+
+            let featureExtractor, classifier;
+            let result;
+
+            const $label = document.getElementById('label');
+            const $score = document.getElementById('score');
+            const $bestScore = document.querySelector('.bestScore');
+            const $yourScore = document.querySelector('.yourScore');
+            const $buttonBest = document.querySelector('.best');
+            const $buttonYour = document.querySelector('.your');
+
+            let time = 0;
+            let color = 'lightgray';
+            let counter = 0;
+            const scores = [];
+
+            const init = async () => {
+
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: {width:640, height:480} });
+                $video.srcObject = stream;
+                video.play();
+                document.body.appendChild($video);
+
+
+                $video.addEventListener('loadeddata', async () => {
+                    const modelLoaded = () => {
+                        console.log('Model Loaded!');
+                    }
+                    const handpose = ml5.handpose($video, modelLoaded);
+                    handpose.on('predict', results => {
+                        predictions = results;
+                        draw(predictions);
+                    });
+
+
+                    featureExtractor = await ml5.featureExtractor('MobileNet');
+                    classifier = featureExtractor.classification($video);
+
+                    await classifier.load('assets/model.json');
+
+                    loop();
+                })
+            }
+
+            const loop = async () => {
+                result = await classifier.classify($video);
+                $label.textContent = `Your hand is ${result[0].label}`;
+
+                loop();
+            }
+
+            const draw = (prediction) => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                time += 5000
+
+                setInterval(() => { color = '#ae00cd', counter = 0 }, time);
+
+
+                if (color === '#ae00cd') {
+                    counter++
+                    if (result[0].label == 'closed') {
+                        color = 'lightgray';
+                        if (counter > 5) {
+                            scores.push(counter);
+                            scores.join();
+                            scores.sort();
+                            scores.sort(compareNumbers);
+                            if (scores[0]) {
+                                $bestScore.textContent = `${scores[0]}`;
+                                $yourScore.textContent = `${counter}`;
+                            }
+
+                            if (scores[0] === counter) {
+                                $buttonBest.classList.add('purple');
+                                $buttonYour.classList.add('purple');
+                            }
+                            if (scores[0] !== counter) {
+                                $buttonBest.classList.remove('purple');
+                                $buttonYour.classList.remove('purple');
+                            }
+                        }
+                    }
+                }
+
+                ctx.drawImage(video, 0, 0);
+
+                for (let i = 0; i < predictions.length; i += 1) {
+                    const prediction = predictions[i];
+                    for (let j = 0; j < prediction.landmarks.length; j += 1) {
+                        const keypoint = prediction.landmarks[j];
+                        ctx.beginPath();
+                        ctx.arc(keypoint[0], keypoint[1], 7, 0, 2 * Math.PI, false);
+                        ctx.fillStyle = color;
+                        ctx.fill();
+                    }
+                }
+            }
+
+            const compareNumbers = (a, b) => {
+                return a - b;
+            }
+
+            init();
+
+        }
+    </script>
+</body>
+
+</html>
